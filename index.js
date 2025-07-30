@@ -1,13 +1,15 @@
 const mqtt = require('mqtt');
-const client = mqtt.connect('mqtt://test.mosquitto.org:1883');
+
+// Kết nối MQTT (KHÔNG phải MQTTs)
+const client = mqtt.connect('mqtt://broker.hivemq.com:1883');
 
 let sensors = [];
-let nextSensorId = 1;
-const UPDATE_INTERVAL = 5000; 
+const UPDATE_INTERVAL = 5000; // 5 giây
 
-// Connect MQTT
 client.on('connect', () => {
-  console.log('✅ Connected to MQTT broker');
+  console.log('✅ Connected to HiveMQ (1883)');
+
+  // Đăng ký lắng nghe 2 topic control
   client.subscribe('/sensors/create', () => {
     console.log('📥 Subscribed to /sensors/create');
   });
@@ -16,88 +18,84 @@ client.on('connect', () => {
   });
 });
 
-// Handle MQTT messages
 client.on('message', (topic, message) => {
-  if (topic === '/sensors/create') {
-    try {
-      const payload = JSON.parse(message.toString());
-      createSensor(payload);
-    } catch (err) {
-      console.error('❌ Invalid payload:', message.toString());
-    }
-  }
-  if (topic === '/sensors/delete') {
   try {
     const payload = JSON.parse(message.toString());
-    deleteSensor(payload.id);
+
+    if (topic === '/sensors/create') {
+      createSensor(payload);
+    } else if (topic === '/sensors/delete') {
+      deleteSensor(payload.deviceId);
+    }
   } catch (err) {
-    console.error('❌ Invalid delete payload:', message.toString());
+    console.error('❌ Invalid message:', err.message);
   }
-}
 });
 
-// Create a new sensor
-function createSensor(initial = {}) {
-  const id = `sensor-${nextSensorId++}`;
-  const topic = `/sensor/${id}`;
+function createSensor({ deviceId, classroomId }) {
+  if (!deviceId || !classroomId) return;
+
+  // Không trùng lặp
+  if (sensors.find(s => s.deviceId === deviceId)) return;
 
   const sensor = {
-    id,
-    topic,
-    temperature: typeof initial.temperature === 'number' ? initial.temperature : randomInRange(18, 35),
-    humidity: typeof initial.humidity === 'number' ? initial.humidity : randomInRange(50, 90),
-    illuminance: typeof initial.illuminance === 'number' ? initial.illuminance : randomInRange(400, 1500)
+    topic: `/virtual-sensor/${deviceId}`,
+    deviceId,
+    classroomId,
+    temperature: randomInRange(16, 35),
+    humidity: randomInRange(30, 90),
+    light: randomInRange(200, 1600),
+    co2: randomInRange(900, 1600)
   };
 
   sensors.push(sensor);
-  console.log(`✅ Created sensor ${id}`);
+  console.log(`✅ Created sensor ${deviceId} in ${classroomId}`);
 }
 
-// Delete a sensor
-function deleteSensor(id) {
-  const index = sensors.findIndex(sensor => sensor.id === id);
+function deleteSensor(deviceId) {
+  const index = sensors.findIndex(s => s.deviceId === deviceId);
   if (index !== -1) {
-    const removed = sensors.splice(index, 1)[0];
-    console.log(`🗑️ Deleted sensor: ${removed.id}`);
+    const [removed] = sensors.splice(index, 1);
+    console.log(`🗑️ Deleted sensor ${removed.deviceId}`);
   } else {
-    console.warn(`⚠️ Sensor ${id} not found`);
+    console.warn(`⚠️ Sensor ${deviceId} not found`);
   }
 }
 
-// Randomizer with boundaries
-function randomizeWithBoundaries(value, min, max, amplitude) {
+function randomize(value, min, max, amplitude) {
   const lower = Math.max(value - amplitude, min);
   const upper = Math.min(value + amplitude, max);
   return Math.floor(Math.random() * (upper - lower + 1)) + lower;
 }
 
-// Random helper
 function randomInRange(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// Randomize and publish every interval
+// Gửi dữ liệu định kỳ
 setInterval(() => {
-  console.log(`🔢 Total sensors: ${sensors.length}`);
   sensors.forEach(sensor => {
-    sensor.temperature = randomizeWithBoundaries(sensor.temperature, 18, 35, 2);
-    sensor.humidity = randomizeWithBoundaries(sensor.humidity, 40, 90, 4);
-    sensor.illuminance = randomizeWithBoundaries(sensor.illuminance, 400, 1500, 10);
+    sensor.temperature = randomize(sensor.temperature, 16, 35, 1.5);
+    sensor.humidity = randomize(sensor.humidity, 30, 90, 3.5);
+    sensor.light = randomize(sensor.light, 200, 1600, 10.5);
+    sensor.co2 = randomize(sensor.co2, 900, 1600, 5.5);
 
     const data = {
-      sensorId: sensor.id,
+      deviceId: sensor.deviceId,
+      classroomId: sensor.classroomId,
       temperature: sensor.temperature,
       humidity: sensor.humidity,
-      illuminance: sensor.illuminance,
+      light: sensor.light,
+      co2: sensor.co2,
       timestamp: new Date().toISOString()
     };
 
-    client.publish(sensor.topic, JSON.stringify(data), (err) => {
-  if (err) {
-    console.error(`❌ Failed to publish to ${sensor.topic}:`, err);
-  } else {
-    console.log(`📤 Published to ${sensor.topic}:`, data);
-  }
-});
+    client.publish(sensor.topic, JSON.stringify(data), err => {
+      if (err) {
+        console.error(`❌ Publish failed: ${sensor.topic}`, err);
+      } else {
+        console.log(`📤 Published to ${sensor.topic}:`, data);
+      }
+    });
   });
 }, UPDATE_INTERVAL);
