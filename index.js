@@ -40,9 +40,9 @@ client.on('message', (topic, message) => {
         const payload = JSON.parse(message.toString());
 
         if (Array.isArray(payload)) {
-          payload.forEach(idObj => deleteSensor(idObj.id || idObj)); // chấp nhận cả dạng [{id: "sensor-1"}] hoặc ["sensor-1"]
+          payload.forEach(idObj => deleteSensor(idObj.deviceCode || idObj)); // chấp nhận cả dạng [{id: "sensor-1"}] hoặc ["sensor-1"]
         } else {
-          deleteSensor(payload.id || payload);
+          deleteSensor(payload.deviceCode || payload);
         }
 
       } catch (err) {
@@ -54,15 +54,15 @@ client.on('message', (topic, message) => {
   }
 });
 
-function createSensor({ deviceId, classroomId }) {
-  if (!deviceId || !classroomId) return;
+function createSensor({ deviceCode, classroomId }) {
+  if (!deviceCode || !classroomId) return;
 
   // Không trùng lặp
-  if (sensors.find(s => s.deviceId === deviceId)) return;
+  if (sensors.find(s => s.deviceCode === deviceCode)) return;
 
   const sensor = {
-    topic: `/virtual-sensor/${deviceId}`,
-    deviceId,
+    topic: `/virtual-sensor/${deviceCode}`,
+    deviceCode,
     classroomId,
     temperature: randomInRange(16, 35),
     humidity: randomInRange(30, 90),
@@ -71,16 +71,16 @@ function createSensor({ deviceId, classroomId }) {
   };
 
   sensors.push(sensor);
-  console.log(`✅ Created sensor ${deviceId} in ${classroomId}`);
+  console.log(`✅ Created sensor ${deviceCode} in ${classroomId}`);
 }
 
-function deleteSensor(deviceId) {
-  const index = sensors.findIndex(s => s.deviceId === deviceId);
+function deleteSensor(deviceCode) {
+  const index = sensors.findIndex(s => s.deviceCode === deviceCode);
   if (index !== -1) {
     const [removed] = sensors.splice(index, 1);
-    console.log(`🗑️ Deleted sensor ${removed.deviceId}`);
+    console.log(`🗑️ Deleted sensor ${removed.deviceCode}`);
   } else {
-    console.warn(`⚠️ Sensor ${deviceId} not found`);
+    console.warn(`⚠️ Sensor ${deviceCode} not found`);
   }
 }
 
@@ -103,7 +103,7 @@ setInterval(() => {
     sensor.co2 = randomize(sensor.co2, 900, 1600, 5.5);
 
     const data = {
-      deviceId: sensor.deviceId,
+      deviceCode: sensor.deviceCode,
       classroomId: sensor.classroomId,
       temperature: sensor.temperature,
       humidity: sensor.humidity,
