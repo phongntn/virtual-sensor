@@ -23,9 +23,31 @@ client.on('message', (topic, message) => {
     const payload = JSON.parse(message.toString());
 
     if (topic === '/sensors/create') {
-      createSensor(payload);
+      try {
+      const payload = JSON.parse(message.toString());
+
+      if (Array.isArray(payload)) {
+        payload.forEach(sensor => createSensor(sensor));
+      } else {
+        createSensor(payload);
+      }
+
+    } catch (err) {
+      console.error('❌ Invalid payload:', message.toString());
+    }
     } else if (topic === '/sensors/delete') {
-      deleteSensor(payload.deviceId);
+      try {
+        const payload = JSON.parse(message.toString());
+
+        if (Array.isArray(payload)) {
+          payload.forEach(idObj => deleteSensor(idObj.id || idObj)); // chấp nhận cả dạng [{id: "sensor-1"}] hoặc ["sensor-1"]
+        } else {
+          deleteSensor(payload.id || payload);
+        }
+
+      } catch (err) {
+        console.error('❌ Invalid delete payload:', message.toString());
+      }
     }
   } catch (err) {
     console.error('❌ Invalid message:', err.message);
